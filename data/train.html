@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang='th'>
+<head>
+<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<meta charset='UTF-8'>
+<title>Gesture Training & Management</title>
+<style>
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: #f8fafc; text-align: center; margin: 0; padding: 15px; }
+  h1 { color: #38bdf8; font-size: 1.5rem; margin-bottom: 5px; }
+  .subtitle { color: #94a3b8; font-size: 0.85rem; margin-bottom: 20px; }
+  .card { background: #1e293b; border: 1px solid #334155; padding: 15px; margin: 12px auto; width: 90%; max-width: 400px; border-radius: 14px; text-align: left; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); }
+  .btn { background-color: #0284c7; color: white; padding: 10px 16px; text-decoration: none; border-radius: 8px; font-weight: bold; display: block; width: 100%; margin: 8px 0; border: none; cursor: pointer; text-align: center; }
+  .btn-gray { background-color: #475569; }
+  .input-text { width: 100%; padding: 8px; margin: 5px 0 10px 0; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box; }
+  .gesture-item { display: flex; justify-content: space-between; align-items: center; background: #0f172a; padding: 8px 12px; margin: 6px 0; border-radius: 6px; border: 1px solid #334155; }
+</style>
+</head>
+<body>
+  
+  <h1>🏋️ โหมดเทรนท่าเคลื่อนไหว (Dynamic Training)</h1>
+  <div class='subtitle'>บันทึกช่วงการเคลื่อนไหวต่อเนื่อง 10 วินาที</div>
+  
+  <div class='card'>
+    <h3 style='margin-top:0; color:#38bdf8; font-size:1.1rem;'>➕ สร้างท่าทางเคลื่อนไหว</h3>
+    <label style='font-size: 0.85rem; color: #94a3b8;'>ชื่อท่า (เสียงพูด เช่น หิวข้าว, ห้องน้ำ):</label>
+    <input type='text' id='train-name' class='input-text' placeholder='กรอกชื่อท่า...'>
+    
+    <div style='font-size: 0.9rem; margin-bottom: 10px;'>สถานะ: <b id='train-status' style='color:#38bdf8;'>พร้อมบันทึก (10 วินาที)</b></div>
+    <button onclick='startDynamicTraining()' class='btn' id='train-btn'>🔴 เริ่มบันทึกท่าเคลื่อนไหว (10 วิ)</button>
+  </div>
+
+  <div class='card'>
+    <h3 style='margin-top:0; color:#38bdf8; font-size:1.1rem;'>📋 รายการท่าที่บันทึกไว้</h3>
+    <div id='gesture-list'>กำลังโหลด...</div>
+  </div>
+
+  <div class='card' style='text-align: center;'>
+    <a href='/' class='btn btn-gray'>🏠 กลับหน้าแดชบอร์ดหลัก</a>
+  </div>
+
+  <script>
+  function loadGestureList() {
+    fetch('/get_gestures').then(res => res.json()).then(data => {
+      let listHtml = '';
+      if (data.length === 0) {
+        listHtml = '<div style="color:#94a3b8; text-align:center;">ยังไม่มีท่าที่บันทึก</div>';
+      } else {
+        data.forEach(item => {
+          listHtml += `<div class='gesture-item'><span>🗣️ <b>${item.name}</b></span><button onclick='deleteGesture(${item.id})' style='background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;'>ลบ</button></div>`;
+        });
+      }
+      document.getElementById('gesture-list').innerHTML = listHtml;
+    });
+  }
+
+  function startDynamicTraining() {
+    let name = document.getElementById('train-name').value;
+    if (!name) { alert('กรุณากรอกชื่อท่าก่อนครับ!'); return; }
+    
+    let btn = document.getElementById('train-btn');
+    let status = document.getElementById('train-status');
+    btn.disabled = true;
+    btn.style.background = "#64748b";
+
+    let samplesF1 = [], samplesF2 = [], samplesAcX = [], samplesAcY = [], samplesAcZ = [];
+    let timeLeft = 10;
+    
+    status.innerText = `กำลังบันทึก... เหลือเวลาอีก ${timeLeft} วินาที (ขยับมือทำท่าได้เลย)`;
+
+    // เก็บข้อมูลต่อเนื่องทุกๆ 200 มิลลิวินาที เป็นเวลา 10 วินาที (รวม 50 จุดข้อมูล)
+    let sampleInterval = setInterval(() => {
+      fetch('/data').then(res => res.json()).then(data => {
+        samplesF1.push(data.f1_raw);
+        samplesF2.push(data.f2_raw);
+        samplesAcX.push(data.acx);
+        samplesAcY.push(data.acy);
+        samplesAcZ.push(data.acz);
+      });
+    }, 200);
+
+    let countdown = setInterval(() => {
+      timeLeft--;
+      if (timeLeft > 0) {
+        status.innerText = `กำลังบันทึก... เหลือเวลาอีก ${timeLeft} วินาที (ทำท่าต่อเนื่อง)`;
+      } else {
+        clearInterval(countdown);
+        clearInterval(sampleInterval);
+
+        if (samplesF1.length === 0) {
+          alert('ไม่พบข้อมูลเซนเซอร์ กรุณาลองใหม่');
+          btn.disabled = false;
+          btn.style.background = "#0284c7";
+          status.innerText = 'พร้อมบันทึก (10 วินาที)';
+          return;
+        }
+
+        // คำนหาค่า Min และ Max ของช่วงการขยับทั้งหมดในช่วง 10 วินาทีที่ผ่านมา
+        let f1_min = Math.min(...samplesF1) - 50;  // เผื่อขอบเขต (Tolerance) เล็กน้อย
+        let f1_max = Math.max(...samplesF1) + 50;
+        let f2_min = Math.min(...samplesF2) - 50;
+        let f2_max = Math.max(...samplesF2) + 50;
+        let acx_min = Math.min(...samplesAcX) - 2000;
+        let acx_max = Math.max(...samplesAcX) + 2000;
+        let acy_min = Math.min(...samplesAcY) - 2000;
+        let acy_max = Math.max(...samplesAcY) + 2000;
+        let acz_min = Math.min(...samplesAcZ) - 2000;
+        let acz_max = Math.max(...samplesAcZ) + 2000;
+
+        let url = `/train_save?name=${encodeURIComponent(name)}&f1_min=${f1_min}&f1_max=${f1_max}&f2_min=${f2_min}&f2_max=${f2_max}&acx_min=${acx_min}&acx_max=${acx_max}&acy_min=${acy_min}&acy_max=${acy_max}&acz_min=${acz_min}&acz_max=${acz_max}`;
+        
+        fetch(url).then(() => {
+          alert('บันทึกช่วงการเคลื่อนไหวของท่า "' + name + '" สำเร็จ!');
+          document.getElementById('train-name').value = '';
+          btn.disabled = false;
+          btn.style.background = "#0284c7";
+          status.innerText = 'พร้อมบันทึก (10 วินาที)';
+          loadGestureList();
+        });
+      }
+    }, 1000);
+  }
+
+  function deleteGesture(id) {
+    if (confirm('ต้องการลบท่านี้ใช่หรือไม่?')) {
+      fetch('/delete_gesture?id=' + id).then(() => loadGestureList());
+    }
+  }
+
+  window.onload = loadGestureList;
+  </script>
+</body>
+</html>

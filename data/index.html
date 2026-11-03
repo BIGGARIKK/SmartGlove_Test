@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang='th'>
+<head>
+<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<meta charset='UTF-8'>
+<title>Smart Glove Dashboard</title>
+<style>
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: #f8fafc; text-align: center; margin: 0; padding: 15px; }
+  h1 { color: #38bdf8; font-size: 1.5rem; margin-bottom: 5px; }
+  .subtitle { color: #94a3b8; font-size: 0.85rem; margin-bottom: 20px; }
+  .card { background: #1e293b; border: 1px solid #334155; padding: 15px; margin: 12px auto; width: 90%; max-width: 400px; border-radius: 14px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); }
+  .gesture-box { background: linear-gradient(135deg, #0284c7, #2563eb); color: white; border: none; }
+  .gesture-text { font-size: 2.2rem; font-weight: bold; margin: 15px 0; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+  .metric-row { display: flex; justify-content: space-between; margin: 8px 0; font-size: 1rem; border-bottom: 1px solid #334155; padding-bottom: 6px; }
+  .progress-bar { background: #334155; border-radius: 6px; height: 8px; width: 100%; margin-top: 4px; overflow: hidden; }
+  .progress-fill { background: #38bdf8; height: 100%; border-radius: 6px; transition: width 0.3s; }
+  .btn { background-color: #3b82f6; color: white; padding: 10px 16px; text-decoration: none; border-radius: 8px; font-weight: bold; display: block; width: 100%; margin: 8px 0; border: none; cursor: pointer; font-size: 0.95rem; box-sizing: border-box; }
+  .btn-green { background-color: #22c55e; }
+  .btn-orange { background-color: #f59e0b; }
+</style>
+</head>
+<body>
+  
+  <h1>🖐️ Smart Glove Dashboard</h1>
+  <div class='subtitle'>โหมดปัจจุบัน: <b id='mode-label' style='color: #38bdf8;'>กำลังโหลด...</b></div>
+  
+  <div class='card gesture-box'>
+    <div style='font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px;'>🎯 คำแปลปัจจุบัน</div>
+    <div class='gesture-text' id='gesture-val'>กำลังรอท่าทาง...</div>
+  </div>
+
+  <div class='card'>
+    <h3 style='margin-top:0; color:#38bdf8; font-size:1.1rem;'>⚡ แหล่งจ่ายไฟ</h3>
+    <button onclick='togglePowerMode()' class='btn btn-orange' id='mode-btn'>สลับโหมดพลังงาน</button>
+  </div>
+
+  <div class='card'>
+    <h3 style='margin-top:0; color:#38bdf8; font-size:1.1rem;'>📊 เซนเซอร์นิ้วมือ (Flex Sensors)</h3>
+    <div style='text-align: left; margin-bottom: 10px;'>
+      <span>นิ้วชี้ (D1): <b id='f1-text'>0%</b> (Raw: <span id='f1-raw'>0</span>)</span>
+      <div class='progress-bar'><div class='progress-fill' id='f1-bar' style='width: 0%;'></div></div>
+    </div>
+    <div style='text-align: left;'>
+      <span>นิ้วที่ 2 (D0): <b id='f2-text'>0%</b> (Raw: <span id='f2-raw'>0</span>)</span>
+      <div class='progress-bar'><div class='progress-fill' id='f2-bar' style='width: 0%;'></div></div>
+    </div>
+  </div>
+
+  <div class='card'>
+    <h3 style='margin-top:0; color:#38bdf8; font-size:1.1rem;'>📐 ความเอียงข้อมือ (MPU6050)</h3>
+    <div class='metric-row'><span>แกน X:</span> <b id='acx-val' style='color:#f87171;'>0</b></div>
+    <div class='metric-row'><span>แกน Y:</span> <b id='acy-val' style='color:#4ade80;'>0</b></div>
+    <div class='metric-row' style='border:none;'><span>แกน Z:</span> <b id='acz-val' style='color:#60a5fa;'>0</b></div>
+  </div>
+
+  <div class='card'>
+    <a href='/train_page' class='btn btn-green'>🏋️ ไปยังหน้าเทรนท่าทางและจัดการ</a>
+  </div>
+
+  <script>
+  let lastSpoken = "";
+  let speechTimer = null;
+
+  function speakText(text) {
+    if ('speechSynthesis' in window && text && text !== "กำลังรอท่าทาง..." && text !== "ไม่รู้จักท่าทาง") {
+      if (text !== lastSpoken) {
+        var utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'th-TH';
+        window.speechSynthesis.speak(utterance);
+        lastSpoken = text;
+        
+        clearTimeout(speechTimer);
+        speechTimer = setTimeout(() => {
+          lastSpoken = ""; 
+        }, 3000);
+      }
+    } else if (text === "กำลังรอท่าทาง...") {
+      lastSpoken = ""; 
+    }
+  }
+
+  function togglePowerMode() {
+    fetch('/setmode').then(() => { fetchData(); });
+  }
+
+  function fetchData() {
+    fetch('/data').then(res => res.json()).then(data => {
+      document.getElementById('gesture-val').innerText = data.gesture;
+      document.getElementById('mode-label').innerText = data.mode_str;
+      
+      let modeBtn = document.getElementById('mode-btn');
+      if (data.is_bat === 1) {
+        modeBtn.innerText = "🔌 เปลี่ยนเป็นโหมดเสียบสาย (USB)";
+        modeBtn.className = "btn btn-blue";
+      } else {
+        modeBtn.innerText = "🔋 เปลี่ยนเป็นโหมดใช้แบตเตอรี่ (Battery)";
+        modeBtn.className = "btn btn-orange";
+      }
+
+      document.getElementById('f1-text').innerText = data.f1_percent + '%';
+      document.getElementById('f1-raw').innerText = data.f1_raw;
+      document.getElementById('f1-bar').style.width = data.f1_percent + '%';
+      document.getElementById('f2-text').innerText = data.f2_percent + '%';
+      document.getElementById('f2-raw').innerText = data.f2_raw;
+      document.getElementById('f2-bar').style.width = data.f2_percent + '%';
+      document.getElementById('acx-val').innerText = data.acx;
+      document.getElementById('acy-val').innerText = data.acy;
+      document.getElementById('acz-val').innerText = data.acz;
+      
+      speakText(data.gesture);
+    }).catch(err => console.log(err));
+  }
+
+  setInterval(fetchData, 1000);
+  window.onload = fetchData;
+  </script>
+</body>
+</html>
